@@ -1,0 +1,51 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "CloudFormationFullAccess",
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:ValidateTemplate",
+                "cloudformation:CreateStack",
+                "cloudformation:UpdateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:DescribeStacks",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:ListStacks",
+                "cloudformation:GetTemplate"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMPassRoleForGalaxy",
+            "Effect": "Allow",
+            "Action": "iam:PassRole",
+            "Resource": [
+                "arn:aws:iam::426229613300:role/*galaxy*",
+                "arn:aws:iam::426229613300:role/galaxy-*"
+            ]
+        },
+        {
+            "Sid": "S3BucketAndObjectAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:PutBucketPolicy",
+                "s3:PutBucketVersioning",
+                "s3:PutBucketEncryption",
+                "s3:PutBucketCORS",
+                "s3:PutBucketLifecycleConfiguration",
+                "s3:PutBucketPublicAccessBlock"
+            ],
+            "Resource": [
+                "arn:aws:s3:::galaxy-*",
+                "arn:aws:s3:::galaxy-*/*"
+            ]
+        }
+    ]
+}

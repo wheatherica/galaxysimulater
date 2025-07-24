@@ -37,11 +37,11 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: !Sub '${SimulationDataBucket}/*'
+                Resource: !Sub '${SimulationDataBucket.Arn}/*'
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !Ref SimulationDataBucket
+                Resource: !GetAtt SimulationDataBucket.Arn
 
   # Lambda Function
   GalaxySimulatorFunction:
@@ -204,7 +204,7 @@ Resources:
       FunctionName: !GetAtt GalaxySimulatorFunction.Arn
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub '${GalaxySimulatorAPI}/*/POST/simulate'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${GalaxySimulatorAPI}/*/POST/simulate'
 
   # API Gateway Deployment
   APIDeployment:

@@ -1,0 +1,62 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "BraketQuantumAccess",
+            "Effect": "Allow",
+            "Action": [
+                "braket:GetDevice",
+                "braket:GetQuantumTask",
+                "braket:SearchDevices",
+                "braket:CreateQuantumTask",
+                "braket:CancelQuantumTask",
+                "braket:SearchQuantumTasks",
+                "braket:GetDeviceAvailability"
+            ],
+            "Resource": [
+                "arn:aws:braket:*:*:device/*/*",
+                "arn:aws:braket:*:426229613300:quantum-task/*"
+            ]
+        },
+        {
+            "Sid": "BraketSimulatorAccess",
+            "Effect": "Allow",
+            "Action": [
+                "braket:GetDevice",
+                "braket:CreateQuantumTask"
+            ],
+            "Resource": [
+                "arn:aws:braket:::device/quantum-simulator/amazon/sv1",
+                "arn:aws:braket:::device/quantum-simulator/amazon/tn1",
+                "arn:aws:braket:::device/quantum-simulator/amazon/dm1"
+            ]
+        },
+        {
+            "Sid": "EC2QuantumInstances",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:RunInstances",
+                "ec2:TerminateInstances",
+                "ec2:DescribeInstances",
+                "ec2:DescribeInstanceTypes",
+                "ec2:CreateTags"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "ec2:InstanceType": ["p3.2xlarge", "p3.8xlarge", "p4d.24xlarge", "g4dn.xlarge"]
+                }
+            }
+        },
+        {
+            "Sid": "S3BraketResults",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": "arn:aws:s3:::amazon-braket-*/*"
+        }
+    ]
+}

@@ -1,11 +1,25 @@
 {
-  "buildCommand": "next build",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "regions": ["iad1"],
-  "functions": {
-    "app/page.tsx": {
-      "maxDuration": 10
+  "name": "galaxy-simulator",
+  "version": 2,
+  "builds": [
+    {
+      "src": "galaxy-launcher.html",
+      "use": "@vercel/static"
     }
+  ],
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/galaxy-launcher.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/galaxy-launcher.html"
+    }
+  ],
+  "env": {
+    "AWS_REGION": "ap-northeast-1",
+    "AWS_LAMBDA_CLASSICAL": "galaxy-simulator-main",
+    "AWS_LAMBDA_QUANTUM": "galaxy-quantum-simulator"
   }
 }

@@ -45,6 +45,7 @@ venv/
 *.zip
 deployment.zip
 aws/lambda/galaxy-simulator/node_modules/
+aws/lambda/quantum-galaxy/node_modules/
 
 # Logs
 *.log

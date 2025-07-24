@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Galaxy Simulator - Minimal Stack for Testing'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'development'
+
+Resources:
+  # S3 Bucket for simulation data
+  SimulationDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-sim-data-${Environment}-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${SimulationDataBucket}/*'
+
+  # Lambda Function
+  SimulationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-simulator-${Environment}'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Event:', JSON.stringify(event, null, 2));
+            
+            return {
+              statusCode: 200,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+              },
+              body: JSON.stringify({
+                success: true,
+                message: 'Galaxy Simulator is working!',
+                timestamp: new Date().toISOString(),
+                environment: process.env.AWS_LAMBDA_FUNCTION_NAME
+              })
+            };
+          };
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+          ENVIRONMENT: !Ref Environment
+
+  # API Gateway
+  SimulationAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'galaxy-simulator-api-${Environment}'
+      Description: 'Galaxy Simulator REST API'
+
+  SimulationResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      ParentId: !GetAtt SimulationAPI.RootResourceId
+      PathPart: 'test'
+
+  SimulationMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      ResourceId: !Ref SimulationResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SimulationFunction.Arn}/invocations'
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: SimulationMethod
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      StageName: !Ref Environment
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SimulationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimulationAPI}/*/*/*'
+
+Outputs:
+  APIEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${SimulationAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    
+  S3Bucket:
+    Description: S3 bucket name
+    Value: !Ref SimulationDataBucket
+    
+  LambdaFunction:
+    Description: Lambda function name
+    Value: !Ref SimulationFunction

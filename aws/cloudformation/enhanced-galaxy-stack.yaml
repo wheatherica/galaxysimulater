@@ -1,0 +1,877 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enhanced Galaxy Simulator with Full AWS Integration'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'production'
+    AllowedValues: ['development', 'staging', 'production']
+    Description: Environment name
+  
+  DomainName:
+    Type: String
+    Description: Domain name for the application (optional)
+    Default: ''
+  
+  EnableMonitoring:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Enable CloudWatch monitoring and X-Ray tracing
+  
+  EnableCache:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Enable ElastiCache for performance optimization
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'production']
+  HasDomainName: !Not [!Equals [!Ref DomainName, '']]
+  MonitoringEnabled: !Equals [!Ref EnableMonitoring, 'true']
+  CacheEnabled: !Equals [!Ref EnableCache, 'true']
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 300
+    MemorySize: 3008
+    Tracing: !If [MonitoringEnabled, Active, PassThrough]
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        POWERTOOLS_SERVICE_NAME: galaxy-simulator
+        POWERTOOLS_METRICS_NAMESPACE: GalaxySimulator
+        LOG_LEVEL: !If [IsProduction, INFO, DEBUG]
+
+Resources:
+  # VPC Configuration for Lambda
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vpc'
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-2'
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-1'
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-2'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-igw'
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  NATGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt'
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway1
+
+  PrivateSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Groups
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-lambda-sg'
+
+  # S3 Buckets
+  SimulationDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-sim-data-${Environment}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldSimulations
+            Status: Enabled
+            ExpirationInDays: 30
+            Prefix: simulations/
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 7
+                StorageClass: STANDARD_IA
+            Prefix: simulations/
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, POST, PUT, DELETE, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-sim-assets-${Environment}-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AssetsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AssetsBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${AssetsBucket.Arn}/*'
+
+  # DynamoDB Tables
+  SimulationMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'galaxy-sim-metadata-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: simulationId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: simulationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  SimulationConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'galaxy-sim-config-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: configId
+          AttributeType: S
+        - AttributeName: version
+          AttributeType: N
+      KeySchema:
+        - AttributeName: configId
+          KeyType: HASH
+        - AttributeName: version
+          KeyType: RANGE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ElastiCache
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Condition: CacheEnabled
+    Properties:
+      Description: Subnet group for Galaxy Simulator cache
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CacheEnabled
+    Properties:
+      GroupDescription: Security group for ElastiCache
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-cache-sg'
+
+  SimulationCache:
+    Type: AWS::ElastiCache::CacheCluster
+    Condition: CacheEnabled
+    Properties:
+      CacheNodeType: !If [IsProduction, cache.r6g.large, cache.t3.micro]
+      Engine: redis
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref CacheSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-cache'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda Functions
+  SimulationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'galaxy-sim-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - !If [MonitoringEnabled, arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess, !Ref 'AWS::NoValue']
+      Policies:
+        - PolicyName: SimulationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${SimulationDataBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt SimulationDataBucket.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt SimulationMetadataTable.Arn
+                  - !Sub '${SimulationMetadataTable.Arn}/index/*'
+                  - !GetAtt SimulationConfigTable.Arn
+              - Effect: Allow
+                Action:
+                  - elasticache:DescribeCacheClusters
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Ref SimulationStateMachine
+
+  SimulationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-simulator-${Environment}'
+      CodeUri: ../lambda/galaxy-simulator/
+      Handler: index.handler
+      Role: !GetAtt SimulationLambdaRole.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+          METADATA_TABLE: !Ref SimulationMetadataTable
+          CONFIG_TABLE: !Ref SimulationConfigTable
+          CACHE_ENDPOINT: !If 
+            - CacheEnabled
+            - !GetAtt SimulationCache.RedisEndpoint.Address
+            - ''
+          STATE_MACHINE_ARN: !Ref SimulationStateMachine
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SimulationAPI
+            Path: /simulate
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  BatchProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-batch-processor-${Environment}'
+      CodeUri: ../lambda/batch-processor/
+      Handler: index.handler
+      Role: !GetAtt SimulationLambdaRole.Arn
+      MemorySize: 10240
+      Timeout: 900
+      EphemeralStorage:
+        Size: 10240
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+          METADATA_TABLE: !Ref SimulationMetadataTable
+
+  AnalyticsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-analytics-${Environment}'
+      CodeUri: ../lambda/analytics/
+      Handler: index.handler
+      Role: !GetAtt SimulationLambdaRole.Arn
+      Environment:
+        Variables:
+          METADATA_TABLE: !Ref SimulationMetadataTable
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Enabled: !If [IsProduction, true, false]
+
+  # Step Functions
+  StepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt SimulationFunction.Arn
+                  - !GetAtt BatchProcessorFunction.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !GetAtt SimulationMetadataTable.Arn
+
+  SimulationStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub 'galaxy-simulation-workflow-${Environment}'
+      RoleArn: !GetAtt StepFunctionsRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Galaxy simulation workflow",
+          "StartAt": "InitializeSimulation",
+          "States": {
+            "InitializeSimulation": {
+              "Type": "Task",
+              "Resource": "${SimulationFunction.Arn}",
+              "Parameters": {
+                "action": "initialize",
+                "params.$": "$.params",
+                "simulationId.$": "$.simulationId"
+              },
+              "Next": "SimulationLoop",
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ]
+            },
+            "SimulationLoop": {
+              "Type": "Map",
+              "MaxConcurrency": 10,
+              "ItemsPath": "$.iterations",
+              "Iterator": {
+                "StartAt": "RunSimulationStep",
+                "States": {
+                  "RunSimulationStep": {
+                    "Type": "Task",
+                    "Resource": "${BatchProcessorFunction.Arn}",
+                    "End": true
+                  }
+                }
+              },
+              "Next": "FinalizeSimulation"
+            },
+            "FinalizeSimulation": {
+              "Type": "Task",
+              "Resource": "${SimulationFunction.Arn}",
+              "Parameters": {
+                "action": "finalize",
+                "simulationId.$": "$.simulationId"
+              },
+              "End": true
+            }
+          }
+        }
+
+  # API Gateway
+  SimulationAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'galaxy-simulator-api-${Environment}'
+      StageName: !Ref Environment
+      TracingEnabled: !If [MonitoringEnabled, true, false]
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+            gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+
+  # Cognito User Pool
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub 'galaxy-simulator-users-${Environment}'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      PasswordPolicy:
+        MinimumLength: 8
+        RequireUppercase: true
+        RequireLowercase: true
+        RequireNumbers: true
+        RequireSymbols: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: false
+        - Name: name
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+      UserPoolTags:
+        Environment: !Ref Environment
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub 'galaxy-simulator-client-${Environment}'
+      UserPoolId: !Ref UserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      CallbackURLs:
+        - !If 
+          - HasDomainName
+          - !Sub 'https://${DomainName}/callback'
+          - !Sub 'https://${AmplifyApp.DefaultDomain}/callback'
+      LogoutURLs:
+        - !If 
+          - HasDomainName
+          - !Sub 'https://${DomainName}/logout'
+          - !Sub 'https://${AmplifyApp.DefaultDomain}/logout'
+      SupportedIdentityProviders:
+        - COGNITO
+
+  # CloudWatch Dashboard
+  SimulationDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: MonitoringEnabled
+    Properties:
+      DashboardName: !Sub 'galaxy-simulator-${Environment}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", {"stat": "Sum"}],
+                  [".", "Errors", {"stat": "Sum"}],
+                  [".", "Duration", {"stat": "Average"}],
+                  [".", "ConcurrentExecutions", {"stat": "Maximum"}]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Lambda Metrics"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  ["AWS/DynamoDB", "UserErrors", {"stat": "Sum"}],
+                  [".", "ConsumedReadCapacityUnits", {"stat": "Sum"}],
+                  [".", "ConsumedWriteCapacityUnits", {"stat": "Sum"}]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Metrics"
+              }
+            }
+          ]
+        }
+
+  # CloudWatch Alarms
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringEnabled
+    Properties:
+      AlarmName: !Sub 'galaxy-sim-high-error-rate-${Environment}'
+      AlarmDescription: 'High error rate detected in Lambda functions'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SimulationFunction
+      AlarmActions:
+        - !Ref ErrorTopic
+
+  ErrorTopic:
+    Type: AWS::SNS::Topic
+    Condition: MonitoringEnabled
+    Properties:
+      TopicName: !Sub 'galaxy-sim-errors-${Environment}'
+      DisplayName: 'Galaxy Simulator Error Notifications'
+
+  # Amplify App for Frontend Hosting
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: amplify.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: AmplifyPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub '${AssetsBucket.Arn}/*'
+
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub 'galaxy-simulator-${Environment}'
+      Repository: 'https://github.com/yourusername/galaxy-simulator'
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+      EnvironmentVariables:
+        - Name: REACT_APP_API_ENDPOINT
+          Value: !Sub 'https://${SimulationAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+        - Name: REACT_APP_USER_POOL_ID
+          Value: !Ref UserPool
+        - Name: REACT_APP_USER_POOL_CLIENT_ID
+          Value: !Ref UserPoolClient
+        - Name: REACT_APP_ASSETS_BUCKET
+          Value: !Ref AssetsBucket
+        - Name: REACT_APP_ENVIRONMENT
+          Value: !Ref Environment
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: .next
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: !Ref Environment
+      EnableAutoBuild: true
+      EnablePullRequestPreview: !If [IsProduction, false, true]
+
+  # Custom Domain (optional)
+  AmplifyDomain:
+    Type: AWS::Amplify::Domain
+    Condition: HasDomainName
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      DomainName: !Ref DomainName
+      SubDomainSettings:
+        - BranchName: !Ref AmplifyBranch.BranchName
+          Prefix: ''
+
+  # EventBridge for async processing
+  SimulationEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub 'galaxy-simulator-events-${Environment}'
+
+  SimulationEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'galaxy-sim-processor-${Environment}'
+      EventBusName: !Ref SimulationEventBus
+      EventPattern:
+        source:
+          - galaxy.simulator
+        detail-type:
+          - 'Simulation Started'
+          - 'Simulation Completed'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalyticsFunction.Arn
+          Id: '1'
+
+  # Outputs
+Outputs:
+  APIEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${SimulationAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-api-endpoint'
+
+  WebAppURL:
+    Description: Amplify web app URL
+    Value: !If 
+      - HasDomainName
+      - !Sub 'https://${DomainName}'
+      - !Sub 'https://${AmplifyBranch.BranchName}.${AmplifyApp.DefaultDomain}'
+    Export:
+      Name: !Sub '${AWS::StackName}-webapp-url'
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub '${AWS::StackName}-user-pool-id'
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub '${AWS::StackName}-user-pool-client-id'
+
+  S3BucketName:
+    Description: S3 bucket for simulation data
+    Value: !Ref SimulationDataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-s3-bucket'
+
+  DynamoDBTableName:
+    Description: DynamoDB table for metadata
+    Value: !Ref SimulationMetadataTable
+    Export:
+      Name: !Sub '${AWS::StackName}-metadata-table'
+
+  CacheEndpoint:
+    Description: ElastiCache endpoint
+    Condition: CacheEnabled
+    Value: !GetAtt SimulationCache.RedisEndpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-cache-endpoint'
+
+  StateMachineArn:
+    Description: Step Functions state machine ARN
+    Value: !Ref SimulationStateMachine
+    Export:
+      Name: !Sub '${AWS::StackName}-state-machine'

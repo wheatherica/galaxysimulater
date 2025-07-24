@@ -1,0 +1,73 @@
+{
+  "policy_creation": {
+    "policy_name": "GalaxySimulatorDeploymentPolicy",
+    "policy_description": "Policy for Galaxy Simulator AWS deployment and management",
+    "policy_document_file": "aws/iam/create-galaxy-policy.json",
+    "target_user": "galaxysimulation",
+    "account_id": "426229613300"
+  },
+  "aws_cli_commands": {
+    "1_create_policy": {
+      "command": "aws iam create-policy",
+      "parameters": [
+        "--policy-name GalaxySimulatorDeploymentPolicy",
+        "--policy-document file://aws/iam/create-galaxy-policy.json",
+        "--description 'Policy for Galaxy Simulator AWS deployment and management'"
+      ],
+      "full_command": "aws iam create-policy --policy-name GalaxySimulatorDeploymentPolicy --policy-document file://aws/iam/create-galaxy-policy.json --description 'Policy for Galaxy Simulator AWS deployment and management'"
+    },
+    "2_attach_to_user": {
+      "command": "aws iam attach-user-policy",
+      "parameters": [
+        "--user-name galaxysimulation",
+        "--policy-arn arn:aws:iam::426229613300:policy/GalaxySimulatorDeploymentPolicy"
+      ],
+      "full_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::426229613300:policy/GalaxySimulatorDeploymentPolicy"
+    },
+    "3_verify_policy": {
+      "command": "aws iam list-attached-user-policies",
+      "parameters": [
+        "--user-name galaxysimulation"
+      ],
+      "full_command": "aws iam list-attached-user-policies --user-name galaxysimulation"
+    }
+  },
+  "aws_console_steps": {
+    "1_navigate": "https://console.aws.amazon.com/iam/home#/policies",
+    "2_create_policy": "Click 'Create policy' button",
+    "3_json_tab": "Click 'JSON' tab",
+    "4_paste_policy": "Paste contents of aws/iam/create-galaxy-policy.json",
+    "5_next_tags": "Click 'Next: Tags' (optional tags)",
+    "6_next_review": "Click 'Next: Review'",
+    "7_policy_name": "Name: GalaxySimulatorDeploymentPolicy",
+    "8_description": "Description: Policy for Galaxy Simulator AWS deployment and management",
+    "9_create_policy": "Click 'Create policy'",
+    "10_attach_user": "Go to Users → galaxysimulation → Permissions → Attach policies → Select GalaxySimulatorDeploymentPolicy"
+  },
+  "script_execution": {
+    "bash_script": [
+      "#!/bin/bash",
+      "echo 'Creating Galaxy Simulator IAM Policy...'",
+      "",
+      "# Create the policy",
+      "POLICY_ARN=$(aws iam create-policy \\",
+      "  --policy-name GalaxySimulatorDeploymentPolicy \\",
+      "  --policy-document file://aws/iam/create-galaxy-policy.json \\",
+      "  --description 'Policy for Galaxy Simulator AWS deployment and management' \\",
+      "  --query 'Policy.Arn' --output text)",
+      "",
+      "echo \"Policy created with ARN: $POLICY_ARN\"",
+      "",
+      "# Attach to user",
+      "aws iam attach-user-policy \\",
+      "  --user-name galaxysimulation \\",
+      "  --policy-arn $POLICY_ARN",
+      "",
+      "echo 'Policy attached to user galaxysimulation'",
+      "",
+      "# Verify",
+      "echo 'Attached policies:'",
+      "aws iam list-attached-user-policies --user-name galaxysimulation"
+    ]
+  }
+}

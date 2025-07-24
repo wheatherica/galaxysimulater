@@ -1,0 +1,8 @@
+{
+  "required_aws_managed_policies": [
+    "arn:aws:iam::aws:policy/CloudFormationFullAccess"
+  ],
+  "attach_commands": [
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/CloudFormationFullAccess"
+  ]
+}

@@ -1,0 +1,306 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Galaxy Simulator - Simplified Enhanced Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'development'
+    AllowedValues: ['development', 'staging', 'production']
+    Description: Environment name
+  
+  EnableMonitoring:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable CloudWatch monitoring
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, 'production']
+  MonitoringEnabled: !Equals [!Ref EnableMonitoring, 'true']
+
+Resources:
+  # S3 Bucket for simulation data
+  SimulationDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-sim-data-${Environment}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldSimulations
+            Status: Enabled
+            ExpirationInDays: 7
+            Prefix: simulations/
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, POST, PUT, DELETE, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+
+  # DynamoDB Table for simulation metadata
+  SimulationMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'galaxy-sim-metadata-${Environment}'
+      AttributeDefinitions:
+        - AttributeName: simulationId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: simulationId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProduction, true, false]
+
+  # IAM Role for Lambda functions
+  SimulationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'galaxy-sim-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SimulationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${SimulationDataBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt SimulationDataBucket.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt SimulationMetadataTable.Arn
+                  - !Sub '${SimulationMetadataTable.Arn}/index/*'
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+
+  # Main simulation Lambda function
+  SimulationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-simulator-${Environment}'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const s3 = new AWS.S3();
+          const dynamodb = new AWS.DynamoDB.DocumentClient();
+          
+          exports.handler = async (event) => {
+            try {
+              const { action, params, simulationId } = JSON.parse(event.body || '{}');
+              
+              console.log('Processing request', { action, simulationId });
+              
+              if (action === 'test') {
+                return {
+                  statusCode: 200,
+                  headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                  },
+                  body: JSON.stringify({
+                    success: true,
+                    message: 'Galaxy Simulator API is working!',
+                    environment: process.env.ENVIRONMENT,
+                    timestamp: new Date().toISOString()
+                  })
+                };
+              }
+              
+              return {
+                statusCode: 200,
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Headers': 'Content-Type',
+                  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                },
+                body: JSON.stringify({
+                  success: true,
+                  message: 'Basic simulation handler',
+                  action,
+                  simulationId
+                })
+              };
+              
+            } catch (error) {
+              console.error('Handler error:', error);
+              return {
+                statusCode: 500,
+                headers: {
+                  'Access-Control-Allow-Origin': '*'
+                },
+                body: JSON.stringify({ error: error.message })
+              };
+            }
+          };
+      Role: !GetAtt SimulationLambdaRole.Arn
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+          METADATA_TABLE: !Ref SimulationMetadataTable
+          ENVIRONMENT: !Ref Environment
+      Timeout: 300
+      MemorySize: 3008
+
+  # API Gateway
+  SimulationAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'galaxy-simulator-api-${Environment}'
+      Description: 'Galaxy Simulator REST API'
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  SimulationResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      ParentId: !GetAtt SimulationAPI.RootResourceId
+      PathPart: simulate
+
+  SimulationMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      ResourceId: !Ref SimulationResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SimulationFunction.Arn}/invocations'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseHeaders:
+            Access-Control-Allow-Origin: true
+            Access-Control-Allow-Headers: true
+            Access-Control-Allow-Methods: true
+
+  SimulationOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      ResourceId: !Ref SimulationResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseHeaders:
+            Access-Control-Allow-Headers: true
+            Access-Control-Allow-Methods: true
+            Access-Control-Allow-Origin: true
+
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: [SimulationMethod, SimulationOptionsMethod]
+    Properties:
+      RestApiId: !Ref SimulationAPI
+      StageName: !Ref Environment
+
+  # Lambda permission for API Gateway
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SimulationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SimulationAPI}/*/*'
+
+  # CloudWatch Log Group
+  SimulationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/galaxy-simulator-${Environment}'
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+Outputs:
+  APIEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${SimulationAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-api-endpoint'
+
+  S3BucketName:
+    Description: S3 bucket for simulation data
+    Value: !Ref SimulationDataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-s3-bucket'
+
+  DynamoDBTableName:
+    Description: DynamoDB table for metadata
+    Value: !Ref SimulationMetadataTable
+    Export:
+      Name: !Sub '${AWS::StackName}-metadata-table'
+
+  LambdaFunctionName:
+    Description: Lambda function name
+    Value: !Ref SimulationFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-lambda-function'

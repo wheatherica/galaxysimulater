@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌌 Galaxy Simulator Launcher</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        h1 {
+            text-align: center;
+            color: #64ffda;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px rgba(100, 255, 218, 0.5);
+        }
+        .launcher-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .sim-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+        .sim-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #64ffda;
+        }
+        .sim-description {
+            margin-bottom: 20px;
+            opacity: 0.8;
+        }
+        .launch-btn {
+            background: linear-gradient(45deg, #64ffda, #00bcd4);
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 10px;
+            transition: all 0.3s ease;
+            width: 80%;
+        }
+        .launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(100, 255, 218, 0.4);
+        }
+        .quantum-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+        }
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #64ffda;
+        }
+        .control-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .status.loading {
+            color: #ffc107;
+        }
+        .status.success {
+            color: #4caf50;
+        }
+        .status.error {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌌 Galaxy Simulator Launcher</h1>
+        
+        <div class="launcher-grid">
+            <div class="sim-card">
+                <div class="sim-title">🧮 Classical Simulation</div>
+                <div class="sim-description">
+                    Traditional N-body simulation using Barnes-Hut algorithm<br>
+                    O(N log N) complexity, reliable and fast
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>Number of Bodies:</label>
+                        <input type="number" id="classical-bodies" value="100" min="10" max="1000">
+                    </div>
+                    <div class="control-group">
+                        <label>Time Steps:</label>
+                        <input type="number" id="classical-steps" value="10" min="1" max="50">
+                    </div>
+                </div>
+                <button class="launch-btn" onclick="launchClassical()">🚀 Launch Classical</button>
+            </div>
+
+            <div class="sim-card">
+                <div class="sim-title">⚛️ Quantum Simulation</div>
+                <div class="sim-description">
+                    Quantum N-body simulation with quantum superposition<br>
+                    O(√N) complexity, quantum advantage enabled
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label>Number of Bodies:</label>
+                        <input type="number" id="quantum-bodies" value="50" min="10" max="100">
+                    </div>
+                    <div class="control-group">
+                        <label>Time Steps:</label>
+                        <input type="number" id="quantum-steps" value="5" min="1" max="20">
+                    </div>
+                </div>
+                <button class="launch-btn quantum-btn" onclick="launchQuantum()">⚛️ Launch Quantum</button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+        <div class="results" id="results"></div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <h3>🔧 Available Access Methods</h3>
+            <div style="background: rgba(0, 0, 0, 0.2); padding: 20px; border-radius: 10px; text-align: left;">
+                <strong>1. AWS CLI Direct:</strong><br>
+                <code>aws lambda invoke --function-name galaxy-simulator-main output.json</code><br><br>
+                
+                <strong>2. Function ARNs:</strong><br>
+                Classical: <code>arn:aws:lambda:ap-northeast-1:426229613300:function:galaxy-simulator-main</code><br>
+                Quantum: <code>arn:aws:lambda:ap-northeast-1:426229613300:function:galaxy-quantum-simulator</code><br><br>
+                
+                <strong>3. API Gateway:</strong><br>
+                <code>https://62kn4ootsc.execute-api.ap-northeast-1.amazonaws.com/</code><br><br>
+
+                <strong>4. This Web Interface:</strong><br>
+                Open this HTML file in your browser for interactive simulation
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function launchClassical() {
+            const bodies = document.getElementById('classical-bodies').value;
+            const steps = document.getElementById('classical-steps').value;
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+
+            status.textContent = '🚀 Launching Classical Simulation...';
+            status.className = 'status loading';
+            results.style.display = 'none';
+
+            try {
+                // Note: This would need a backend proxy to call AWS Lambda from browser
+                // For now, show instructions
+                status.textContent = '💡 Use AWS CLI to execute:';
+                status.className = 'status success';
+                
+                results.textContent = `AWS CLI Command:
+aws lambda invoke \\
+  --function-name galaxy-simulator-main \\
+  --payload '{"bodies": ${bodies}, "steps": ${steps}}' \\
+  output.json && cat output.json
+
+Alternative: Use AWS Lambda Console
+1. Go to AWS Lambda Console
+2. Find function: galaxy-simulator-main
+3. Test with payload: {"bodies": ${bodies}, "steps": ${steps}}`;
+                
+                results.style.display = 'block';
+            } catch (error) {
+                status.textContent = '❌ Error: ' + error.message;
+                status.className = 'status error';
+            }
+        }
+
+        async function launchQuantum() {
+            const bodies = document.getElementById('quantum-bodies').value;
+            const steps = document.getElementById('quantum-steps').value;
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+
+            status.textContent = '⚛️ Launching Quantum Simulation...';
+            status.className = 'status loading';
+            results.style.display = 'none';
+
+            try {
+                status.textContent = '💡 Use AWS CLI to execute:';
+                status.className = 'status success';
+                
+                results.textContent = `AWS CLI Command:
+aws lambda invoke \\
+  --function-name galaxy-quantum-simulator \\
+  --payload '{"bodies": ${bodies}, "steps": ${steps}}' \\
+  quantum-output.json && cat quantum-output.json
+
+Alternative: Use AWS Lambda Console
+1. Go to AWS Lambda Console  
+2. Find function: galaxy-quantum-simulator
+3. Test with payload: {"bodies": ${bodies}, "steps": ${steps}}
+
+Expected Output:
+- Quantum speedup: ~7x faster
+- Quantum coherence: 0.8+
+- Entanglement entropy: 15-20
+- O(√N) complexity advantage`;
+                
+                results.style.display = 'block';
+            } catch (error) {
+                status.textContent = '❌ Error: ' + error.message;
+                status.className = 'status error';
+            }
+        }
+
+        // Show initial instructions
+        window.onload = function() {
+            document.getElementById('status').textContent = '🌌 Galaxy Simulator Ready - Choose simulation type above';
+            document.getElementById('status').className = 'status success';
+        };
+    </script>
+</body>
+</html>

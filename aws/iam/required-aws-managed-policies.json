@@ -1,0 +1,65 @@
+{
+  "user_name": "galaxysimulation",
+  "required_aws_managed_policies": [
+    {
+      "policy_name": "AmazonDynamoDBFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
+      "description": "DynamoDB table creation and data operations",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+    },
+    {
+      "policy_name": "AmazonAPIGatewayAdministrator", 
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator",
+      "description": "API Gateway REST API creation and management",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator"
+    },
+    {
+      "policy_name": "AmazonElastiCacheFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess", 
+      "description": "ElastiCache Redis cluster for caching",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess"
+    },
+    {
+      "policy_name": "AWSStepFunctionsFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess",
+      "description": "Step Functions for workflow orchestration", 
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
+    },
+    {
+      "policy_name": "CloudWatchFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/CloudWatchFullAccess",
+      "description": "CloudWatch monitoring and logging",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/CloudWatchFullAccess"
+    },
+    {
+      "policy_name": "AmazonCognitoPowerUser", 
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonCognitoPowerUser",
+      "description": "Cognito user authentication",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonCognitoPowerUser"
+    },
+    {
+      "policy_name": "AmazonEventBridgeFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess", 
+      "description": "EventBridge for event-driven architecture",
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess"
+    },
+    {
+      "policy_name": "AmazonSNSFullAccess",
+      "policy_arn": "arn:aws:iam::aws:policy/AmazonSNSFullAccess",
+      "description": "SNS for notifications and alerts", 
+      "cli_command": "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+    }
+  ],
+  "bulk_attach_command": [
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator", 
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/CloudWatchFullAccess",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonCognitoPowerUser",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess",
+    "aws iam attach-user-policy --user-name galaxysimulation --policy-arn arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+  ],
+  "account_id": "426229613300",
+  "user_arn": "arn:aws:iam::426229613300:user/galaxysimulation"
+}
