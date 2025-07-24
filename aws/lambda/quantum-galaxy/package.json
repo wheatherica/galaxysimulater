@@ -1,0 +1,19 @@
+{
+  "name": "quantum-galaxy-simulator",
+  "version": "1.0.0",
+  "description": "Quantum N-Body Galaxy Simulation with Barnes-Hut Algorithm",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.1691.0"
+  },
+  "keywords": [
+    "quantum",
+    "n-body",
+    "galaxy",
+    "simulation",
+    "barnes-hut",
+    "aws-braket"
+  ],
+  "author": "Galaxy Quantum Team",
+  "license": "MIT"
+}
