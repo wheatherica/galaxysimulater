@@ -1,0 +1,230 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Simplified Galaxy Simulator AWS Infrastructure'
+
+Resources:
+  # S3 Bucket for simulation data
+  SimulationDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-sim-data-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GalaxySimLambdaRole-${AWS::AccountId}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub '${SimulationDataBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Ref SimulationDataBucket
+
+  # Lambda Function
+  GalaxySimulatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-simulator-${AWS::AccountId}'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('Galaxy Simulator Lambda called:', event);
+            
+            try {
+              const body = JSON.parse(event.body || '{}');
+              const { action, params } = body;
+              
+              if (action === 'initialize') {
+                // Generate demo galaxy data
+                const nBodies = params.nBodies || 50000;
+                const positions = [];
+                const colors = [];
+                const types = [];
+                
+                for (let i = 0; i < nBodies; i++) {
+                  const r = Math.random() * 50;
+                  const theta = Math.random() * 2 * Math.PI;
+                  const z = (Math.random() - 0.5) * 4;
+                  
+                  positions.push([
+                    r * Math.cos(theta),
+                    r * Math.sin(theta),
+                    z
+                  ]);
+                  
+                  const distanceColor = Math.min(1, r / 30);
+                  colors.push([
+                    0.1 + distanceColor * 0.2,
+                    0.08 + distanceColor * 0.1,
+                    0.08 + distanceColor * 0.1
+                  ]);
+                  
+                  types.push(i < nBodies * 0.1 ? 'halo' : i < nBodies * 0.25 ? 'bulge' : 'disk');
+                }
+                
+                return {
+                  statusCode: 200,
+                  headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                  },
+                  body: JSON.stringify({
+                    success: true,
+                    simulationId: `sim_${Date.now()}`,
+                    bodyCount: nBodies,
+                    state: {
+                      positions,
+                      colors,
+                      types,
+                      timestamp: Date.now()
+                    }
+                  })
+                };
+              }
+              
+              return {
+                statusCode: 200,
+                headers: {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Headers': 'Content-Type',
+                  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                },
+                body: JSON.stringify({
+                  success: true,
+                  message: 'Galaxy Simulator Lambda is working!'
+                })
+              };
+              
+            } catch (error) {
+              console.error('Error:', error);
+              return {
+                statusCode: 500,
+                headers: {
+                  'Access-Control-Allow-Origin': '*'
+                },
+                body: JSON.stringify({
+                  success: false,
+                  error: error.message
+                })
+              };
+            }
+          };
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+      Timeout: 300
+      MemorySize: 1024
+
+  # API Gateway
+  GalaxySimulatorAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'galaxy-simulator-api-${AWS::AccountId}'
+      Description: 'API for Galaxy Simulator'
+
+  # API Gateway Resource
+  SimulateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ParentId: !GetAtt GalaxySimulatorAPI.RootResourceId
+      PathPart: 'simulate'
+
+  # OPTIONS Method for CORS
+  SimulateOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ResourceId: !Ref SimulateResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # POST Method
+  SimulatePostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ResourceId: !Ref SimulateResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+          - FunctionArn: !GetAtt GalaxySimulatorFunction.Arn
+
+  # Lambda Permission
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt GalaxySimulatorFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub '${GalaxySimulatorAPI}/*/POST/simulate'
+
+  # API Gateway Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - SimulatePostMethod
+      - SimulateOptionsMethod
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      StageName: 'prod'
+
+Outputs:
+  APIEndpoint:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${GalaxySimulatorAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/simulate'
+    Export:
+      Name: !Sub '${AWS::StackName}-APIEndpoint'
+
+  S3BucketName:
+    Description: 'S3 bucket name'
+    Value: !Ref SimulationDataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'

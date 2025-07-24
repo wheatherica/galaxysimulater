@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Galaxy Simulator AWS Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'prod']
+
+Resources:
+  # S3 Bucket for simulation data caching
+  SimulationDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'galaxy-simulator-data-${Environment}-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, POST, PUT, DELETE]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
+
+  # IAM Role for Lambda
+  GalaxySimulatorLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GalaxySimulatorLambdaRole-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub '${SimulationDataBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Ref SimulationDataBucket
+
+  # Lambda Function for Galaxy Simulation
+  GalaxySimulatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'galaxy-simulator-${Environment}'
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt GalaxySimulatorLambdaRole.Arn
+      Code:
+        ZipFile: |
+          // Placeholder - will be updated with actual code
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              body: JSON.stringify({ message: 'Function deployed successfully' })
+            };
+          };
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref SimulationDataBucket
+          ENVIRONMENT: !Ref Environment
+      Timeout: 900  # 15 minutes
+      MemorySize: 3008  # Maximum memory for high-performance computing
+
+  # API Gateway
+  GalaxySimulatorAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 'galaxy-simulator-api-${Environment}'
+      Description: 'API for Galaxy Simulator'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # API Gateway Resource
+  SimulateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ParentId: !GetAtt GalaxySimulatorAPI.RootResourceId
+      PathPart: 'simulate'
+
+  # OPTIONS Method for CORS
+  SimulateOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ResourceId: !Ref SimulateResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # POST Method
+  SimulatePostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      ResourceId: !Ref SimulateResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+          - FunctionArn: !GetAtt GalaxySimulatorFunction.Arn
+
+  # Lambda Permission for API Gateway
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt GalaxySimulatorFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub '${GalaxySimulatorAPI}/*/POST/simulate'
+
+  # API Gateway Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - SimulatePostMethod
+      - SimulateOptionsMethod
+    Properties:
+      RestApiId: !Ref GalaxySimulatorAPI
+      StageName: !Ref Environment
+
+Outputs:
+  APIEndpoint:
+    Description: 'API Gateway endpoint URL'
+    Value: !Sub 'https://${GalaxySimulatorAPI}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/simulate'
+    Export:
+      Name: !Sub '${AWS::StackName}-APIEndpoint'
+
+  S3BucketName:
+    Description: 'S3 bucket name for simulation data'
+    Value: !Ref SimulationDataBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'
+
+  LambdaFunctionArn:
+    Description: 'Lambda function ARN'
+    Value: !GetAtt GalaxySimulatorFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaArn'
