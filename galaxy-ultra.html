@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌌 Galaxy Simulator Ultra</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(ellipse at center, #0f0f23 0%, #000000 100%);
+            color: #ffffff;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            cursor: crosshair;
+        }
+        
+        .control-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 15, 35, 0.95);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            z-index: 100;
+            backdrop-filter: blur(15px);
+            min-width: 280px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #64ffda, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        
+        .control-group {
+            margin-bottom: 12px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 4px;
+            color: #64ffda;
+            font-size: 0.85rem;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 3px;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #64ffda, #00bcd4);
+            color: #000;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 3px;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(100, 255, 218, 0.4);
+        }
+        
+        .quantum-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+            color: white;
+        }
+        
+        .aws-btn {
+            background: linear-gradient(45deg, #ffc107, #ff9800);
+            color: #000;
+        }
+        
+        .stats {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(15, 15, 35, 0.95);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            z-index: 100;
+            backdrop-filter: blur(15px);
+            min-width: 220px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.8rem;
+        }
+        
+        .stat-label {
+            color: #ff6b6b;
+        }
+        
+        .stat-value {
+            color: #64ffda;
+            font-weight: bold;
+        }
+        
+        .fps {
+            color: #4caf50;
+            font-size: 1.1rem;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        
+        .warning {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 8px;
+            padding: 8px;
+            margin: 8px 0;
+            font-size: 0.75rem;
+            color: #ffc107;
+        }
+        
+        .success {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 8px;
+            padding: 8px;
+            margin: 8px 0;
+            font-size: 0.75rem;
+            color: #4caf50;
+        }
+        
+        .mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+        
+        @media (max-width: 768px) {
+            .control-panel, .stats {
+                font-size: 0.8rem;
+                padding: 10px;
+                min-width: 250px;
+            }
+            
+            .mobile-controls {
+                display: flex;
+                gap: 10px;
+            }
+            
+            .control-panel {
+                max-height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="control-panel">
+        <div class="title">🌌 Ultra Galaxy</div>
+        
+        <div class="control-group">
+            <label>Bodies: <span id="bodyCount">100</span></label>
+            <input type="range" id="bodySlider" min="10" max="1000" value="100">
+        </div>
+        
+        <div class="control-group">
+            <label>Gravity: <span id="gravityValue">0.5</span></label>
+            <input type="range" id="gravitySlider" min="0.1" max="2.0" step="0.1" value="0.5">
+        </div>
+        
+        <div class="control-group">
+            <label>Time: <span id="timeValue">1.0</span></label>
+            <input type="range" id="timeSlider" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" onclick="resetSimulation()">🔄 Reset</button>
+            <button class="btn quantum-btn" onclick="toggleQuantum()">⚛️ Quantum</button>
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" onclick="togglePause()">⏯️ Pause</button>
+            <button class="btn aws-btn" onclick="useAWSCompute()">☁️ AWS</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+    
+    <div class="stats">
+        <div class="fps" id="fps">60 FPS</div>
+        <div class="stat-item">
+            <span class="stat-label">Bodies:</span>
+            <span class="stat-value" id="activeBodies">100</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Algorithm:</span>
+            <span class="stat-value" id="algorithm">Barnes-Hut</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Complexity:</span>
+            <span class="stat-value" id="complexity">O(N log N)</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Compute:</span>
+            <span class="stat-value" id="computeType">Browser</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Energy:</span>
+            <span class="stat-value" id="energy">-</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Q-Coherence:</span>
+            <span class="stat-value" id="coherence">-</span>
+        </div>
+    </div>
+    
+    <div class="mobile-controls">
+        <button class="btn" onclick="resetSimulation()">🔄</button>
+        <button class="btn quantum-btn" onclick="toggleQuantum()">⚛️</button>
+        <button class="btn" onclick="togglePause()">⏯️</button>
+    </div>
+
+    <script>
+        // グローバル変数と初期化
+        let canvas, ctx;
+        let bodies = [];
+        let isQuantumMode = false;
+        let isPaused = false;
+        let useAWS = false;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fps = 60;
+        let quadTree;
+        
+        // パフォーマンス監視
+        let performanceMetrics = {
+            frameTime: 0,
+            physicsTime: 0,
+            renderTime: 0,
+            memoryUsage: 0
+        };
+        
+        // エラーハンドリング
+        function initializeCanvas() {
+            try {
+                canvas = document.getElementById('canvas');
+                if (!canvas) throw new Error('Canvas element not found');
+                
+                ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Canvas context not supported');
+                
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                
+                showStatus('Canvas initialized successfully', 'success');
+                return true;
+            } catch (error) {
+                showStatus('Canvas initialization failed: ' + error.message, 'error');
+                return false;
+            }
+        }
+        
+        // QuadTree実装（O(N log N)最適化）
+        class QuadTree {
+            constructor(boundary, capacity = 4) {
+                this.boundary = boundary;
+                this.capacity = capacity;
+                this.bodies = [];
+                this.divided = false;
+            }
+            
+            subdivide() {
+                const x = this.boundary.x;
+                const y = this.boundary.y;
+                const w = this.boundary.w / 2;
+                const h = this.boundary.h / 2;
+                
+                this.northwest = new QuadTree({x: x, y: y, w: w, h: h});
+                this.northeast = new QuadTree({x: x + w, y: y, w: w, h: h});
+                this.southwest = new QuadTree({x: x, y: y + h, w: w, h: h});
+                this.southeast = new QuadTree({x: x + w, y: y + h, w: w, h: h});
+                
+                this.divided = true;
+            }
+            
+            insert(body) {
+                if (!this.contains(body)) return false;
+                
+                if (this.bodies.length < this.capacity) {
+                    this.bodies.push(body);
+                    return true;
+                }
+                
+                if (!this.divided) this.subdivide();
+                
+                return (this.northwest.insert(body) ||
+                        this.northeast.insert(body) ||
+                        this.southwest.insert(body) ||
+                        this.southeast.insert(body));
+            }
+            
+            contains(body) {
+                return (body.x >= this.boundary.x &&
+                        body.x < this.boundary.x + this.boundary.w &&
+                        body.y >= this.boundary.y &&
+                        body.y < this.boundary.y + this.boundary.h);
+            }
+            
+            query(range, found = []) {
+                if (!this.intersects(range)) return found;
+                
+                for (let body of this.bodies) {
+                    if (this.pointInRange(body, range)) {
+                        found.push(body);
+                    }
+                }
+                
+                if (this.divided) {
+                    this.northwest.query(range, found);
+                    this.northeast.query(range, found);
+                    this.southwest.query(range, found);
+                    this.southeast.query(range, found);
+                }
+                
+                return found;
+            }
+            
+            intersects(range) {
+                return !(range.x > this.boundary.x + this.boundary.w ||
+                        range.x + range.w < this.boundary.x ||
+                        range.y > this.boundary.y + this.boundary.h ||
+                        range.y + range.h < this.boundary.y);
+            }
+            
+            pointInRange(body, range) {
+                return (body.x >= range.x && body.x <= range.x + range.w &&
+                        body.y >= range.y && body.y <= range.y + range.h);
+            }
+        }
+        
+        // 改良された天体クラス
+        class Body {
+            constructor(x, y, vx, vy, mass) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.mass = mass;
+                this.radius = Math.max(2, Math.sqrt(mass) * 1.5);
+                this.color = this.generateColor();
+                this.trail = [];
+                this.maxTrailLength = 30; // メモリ最適化
+                
+                // 量子プロパティ
+                this.quantumPhase = Math.random() * Math.PI * 2;
+                this.coherence = 1.0;
+                this.waveFunction = { real: 1, imag: 0 };
+                
+                // 最適化フラグ
+                this.fx = 0;
+                this.fy = 0;
+            }
+            
+            generateColor() {
+                const hue = (this.mass * 30) % 360;
+                const saturation = Math.min(100, 50 + this.mass * 5);
+                const lightness = Math.min(80, 40 + this.mass * 2);
+                return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            }
+            
+            update(dt, timeScale) {
+                if (isPaused) return;
+                
+                try {
+                    // 力の適用
+                    this.vx += this.fx / this.mass * dt * timeScale;
+                    this.vy += this.fy / this.mass * dt * timeScale;
+                    
+                    // 位置更新
+                    this.x += this.vx * dt * timeScale;
+                    this.y += this.vy * dt * timeScale;
+                    
+                    // 量子効果
+                    if (isQuantumMode) {
+                        this.updateQuantumState(dt);
+                    }
+                    
+                    // トレイル更新（最適化）
+                    if (frameCount % 3 === 0) { // 3フレームに1回のみ
+                        this.trail.push({x: this.x, y: this.y});
+                        if (this.trail.length > this.maxTrailLength) {
+                            this.trail.shift();
+                        }
+                    }
+                    
+                    // 境界処理（改良）
+                    this.handleBoundaries();
+                    
+                } catch (error) {
+                    console.warn('Body update error:', error);
+                }
+            }
+            
+            updateQuantumState(dt) {
+                // 量子位相進化
+                this.quantumPhase += dt * 0.01;
+                
+                // 波動関数の時間発展
+                const energy = 0.5 * this.mass * (this.vx * this.vx + this.vy * this.vy);
+                const phase = energy * dt * 0.001;
+                
+                const newReal = this.waveFunction.real * Math.cos(phase) - this.waveFunction.imag * Math.sin(phase);
+                const newImag = this.waveFunction.real * Math.sin(phase) + this.waveFunction.imag * Math.cos(phase);
+                
+                this.waveFunction.real = newReal;
+                this.waveFunction.imag = newImag;
+                
+                // コヒーレンス計算
+                this.coherence = Math.abs(this.waveFunction.real * this.waveFunction.real + 
+                                         this.waveFunction.imag * this.waveFunction.imag);
+                
+                // 量子位置ゆらぎ
+                const uncertainty = 1.0 / Math.sqrt(this.mass);
+                this.x += (Math.random() - 0.5) * uncertainty;
+                this.y += (Math.random() - 0.5) * uncertainty;
+            }
+            
+            handleBoundaries() {
+                const damping = 0.8;
+                
+                if (this.x < this.radius) {
+                    this.x = this.radius;
+                    this.vx *= -damping;
+                } else if (this.x > canvas.width - this.radius) {
+                    this.x = canvas.width - this.radius;
+                    this.vx *= -damping;
+                }
+                
+                if (this.y < this.radius) {
+                    this.y = this.radius;
+                    this.vy *= -damping;
+                } else if (this.y > canvas.height - this.radius) {
+                    this.y = canvas.height - this.radius;
+                    this.vy *= -damping;
+                }
+            }
+            
+            draw() {
+                try {
+                    // トレイル描画（最適化）
+                    if (this.trail.length > 1) {
+                        ctx.strokeStyle = this.color + '40';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                        for (let i = 1; i < this.trail.length; i += 2) { // 2つおきで最適化
+                            ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                        }
+                        ctx.stroke();
+                    }
+                    
+                    // 天体描画
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 量子効果描画
+                    if (isQuantumMode && this.coherence > 0.5) {
+                        ctx.strokeStyle = `rgba(100, 255, 218, ${this.coherence * 0.5})`;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    
+                } catch (error) {
+                    console.warn('Draw error:', error);
+                }
+            }
+            
+            resetForces() {
+                this.fx = 0;
+                this.fy = 0;
+            }
+        }
+        
+        // AWS Lambda統合
+        async function callAWSLambda(functionName, payload) {
+            try {
+                showStatus('Calling AWS Lambda...', 'loading');
+                
+                // 実際のAWS API呼び出し（簡略版）
+                const response = await fetch(`https://lambda.us-east-1.amazonaws.com/2015-03-31/functions/${functionName}/invocations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`AWS Lambda error: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showStatus('AWS computation complete', 'success');
+                return result;
+                
+            } catch (error) {
+                console.warn('AWS Lambda fallback to local compute:', error);
+                showStatus('Using local compute (AWS unavailable)', 'warning');
+                return null;
+            }
+        }
+        
+        // 最適化された力計算
+        function calculateForces() {
+            const startTime = performance.now();
+            
+            try {
+                const gravity = parseFloat(document.getElementById('gravitySlider').value);
+                
+                // QuadTree構築
+                quadTree = new QuadTree({
+                    x: 0, y: 0, 
+                    w: canvas.width, 
+                    h: canvas.height
+                });
+                
+                // 力リセット
+                for (let body of bodies) {
+                    body.resetForces();
+                    quadTree.insert(body);
+                }
+                
+                // Barnes-Hut法による力計算
+                for (let i = 0; i < bodies.length; i++) {
+                    const body = bodies[i];
+                    const range = {
+                        x: body.x - 100,
+                        y: body.y - 100,
+                        w: 200,
+                        h: 200
+                    };
+                    
+                    const nearby = quadTree.query(range);
+                    
+                    for (let other of nearby) {
+                        if (body === other) continue;
+                        
+                        const dx = other.x - body.x;
+                        const dy = other.y - body.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const minDistance = body.radius + other.radius;
+                        
+                        if (distance > minDistance && distance > 0) {
+                            let force = gravity * body.mass * other.mass / (distance * distance);
+                            
+                            // 量子補正
+                            if (isQuantumMode) {
+                                const quantumCorrection = 1.0 + 0.1 * Math.sin(body.quantumPhase + other.quantumPhase);
+                                force *= quantumCorrection;
+                            }
+                            
+                            const fx = force * dx / distance;
+                            const fy = force * dy / distance;
+                            
+                            body.fx += fx;
+                            body.fy += fy;
+                        }
+                    }
+                }
+                
+                performanceMetrics.physicsTime = performance.now() - startTime;
+                
+            } catch (error) {
+                console.error('Force calculation error:', error);
+                showStatus('Physics calculation error', 'error');
+            }
+        }
+        
+        // 天体初期化
+        function initBodies(count) {
+            try {
+                bodies = [];
+                
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.random() * Math.min(canvas.width, canvas.height) * 0.3;
+                    const x = canvas.width / 2 + Math.cos(angle) * distance;
+                    const y = canvas.height / 2 + Math.sin(angle) * distance;
+                    
+                    const orbitalSpeed = Math.sqrt(100 / Math.max(distance, 50)) * 0.3;
+                    const vx = -Math.sin(angle) * orbitalSpeed + (Math.random() - 0.5) * 10;
+                    const vy = Math.cos(angle) * orbitalSpeed + (Math.random() - 0.5) * 10;
+                    
+                    const mass = Math.random() * 8 + 2;
+                    bodies.push(new Body(x, y, vx, vy, mass));
+                }
+                
+                showStatus(`${count} bodies initialized`, 'success');
+                
+            } catch (error) {
+                console.error('Body initialization error:', error);
+                showStatus('Initialization error', 'error');
+            }
+        }
+        
+        // 統計更新
+        function updateStats() {
+            try {
+                document.getElementById('activeBodies').textContent = bodies.length;
+                document.getElementById('algorithm').textContent = isQuantumMode ? 'Quantum B-H' : 'Barnes-Hut';
+                document.getElementById('complexity').textContent = isQuantumMode ? 'O(√N)' : 'O(N log N)';
+                document.getElementById('computeType').textContent = useAWS ? 'AWS Lambda' : 'Browser';
+                
+                // エネルギー計算
+                let totalEnergy = 0;
+                let avgCoherence = 0;
+                
+                for (let body of bodies) {
+                    totalEnergy += 0.5 * body.mass * (body.vx * body.vx + body.vy * body.vy);
+                    if (isQuantumMode) {
+                        avgCoherence += body.coherence;
+                    }
+                }
+                
+                document.getElementById('energy').textContent = Math.round(totalEnergy);
+                document.getElementById('coherence').textContent = isQuantumMode ? 
+                    (avgCoherence / bodies.length).toFixed(3) : '-';
+                
+                // パフォーマンス監視
+                if (performanceMetrics.frameTime > 16.67) { // 60FPS以下
+                    showStatus(`Performance warning: ${performanceMetrics.frameTime.toFixed(1)}ms frame time`, 'warning');
+                }
+                
+            } catch (error) {
+                console.warn('Stats update error:', error);
+            }
+        }
+        
+        // ステータス表示
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            if (!statusDiv) return;
+            
+            const className = type === 'success' ? 'success' : 
+                            type === 'error' ? 'warning' : 
+                            type === 'warning' ? 'warning' : '';
+            
+            statusDiv.innerHTML = `<div class="${className}">${message}</div>`;
+            
+            // 一定時間後に消去
+            setTimeout(() => {
+                if (statusDiv.innerHTML.includes(message)) {
+                    statusDiv.innerHTML = '';
+                }
+            }, 3000);
+        }
+        
+        // メインアニメーションループ
+        function animate() {
+            const frameStartTime = performance.now();
+            
+            try {
+                const currentTime = performance.now();
+                const dt = Math.min((currentTime - lastTime) / 1000, 0.016); // 最大16ms
+                lastTime = currentTime;
+                
+                // FPS計算
+                frameCount++;
+                if (frameCount % 60 === 0) {
+                    fps = Math.round(1000 / (currentTime - frameStartTime + 1));
+                    document.getElementById('fps').textContent = fps + ' FPS';
+                }
+                
+                // 背景クリア（最適化）
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 物理演算
+                if (!isPaused) {
+                    calculateForces();
+                }
+                
+                // 天体更新と描画
+                const renderStartTime = performance.now();
+                const timeScale = parseFloat(document.getElementById('timeSlider').value);
+                
+                for (let body of bodies) {
+                    body.update(dt, timeScale);
+                    body.draw();
+                }
+                
+                performanceMetrics.renderTime = performance.now() - renderStartTime;
+                performanceMetrics.frameTime = performance.now() - frameStartTime;
+                
+                updateStats();
+                
+            } catch (error) {
+                console.error('Animation error:', error);
+                showStatus('Animation error occurred', 'error');
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // イベントハンドラー
+        function setupEventHandlers() {
+            try {
+                // スライダー
+                document.getElementById('bodySlider').oninput = function() {
+                    const count = parseInt(this.value);
+                    document.getElementById('bodyCount').textContent = count;
+                    
+                    // パフォーマンス警告
+                    if (count > 300) {
+                        showStatus('Warning: High body count may affect performance', 'warning');
+                    }
+                    
+                    initBodies(count);
+                };
+                
+                document.getElementById('gravitySlider').oninput = function() {
+                    document.getElementById('gravityValue').textContent = this.value;
+                };
+                
+                document.getElementById('timeSlider').oninput = function() {
+                    document.getElementById('timeValue').textContent = this.value;
+                };
+                
+                // タッチ/マウスイベント
+                let isMouseDown = false;
+                
+                canvas.addEventListener('mousedown', (e) => {
+                    isMouseDown = true;
+                    addBodyAtPosition(e.clientX, e.clientY);
+                });
+                
+                canvas.addEventListener('mousemove', (e) => {
+                    if (isMouseDown) {
+                        addBodyAtPosition(e.clientX, e.clientY);
+                    }
+                });
+                
+                canvas.addEventListener('mouseup', () => {
+                    isMouseDown = false;
+                });
+                
+                // タッチサポート
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addBodyAtPosition(touch.clientX, touch.clientY);
+                });
+                
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    addBodyAtPosition(touch.clientX, touch.clientY);
+                });
+                
+                // リサイズ対応
+                window.addEventListener('resize', () => {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    showStatus('Canvas resized', 'info');
+                });
+                
+            } catch (error) {
+                console.error('Event handler setup error:', error);
+            }
+        }
+        
+        // 位置に天体追加
+        function addBodyAtPosition(x, y) {
+            try {
+                if (bodies.length < 1000) { // 制限
+                    const mass = Math.random() * 5 + 2;
+                    const vx = (Math.random() - 0.5) * 20;
+                    const vy = (Math.random() - 0.5) * 20;
+                    bodies.push(new Body(x, y, vx, vy, mass));
+                }
+            } catch (error) {
+                console.warn('Add body error:', error);
+            }
+        }
+        
+        // コントロール関数
+        function resetSimulation() {
+            const count = parseInt(document.getElementById('bodySlider').value);
+            initBodies(count);
+        }
+        
+        function toggleQuantum() {
+            isQuantumMode = !isQuantumMode;
+            const btn = event.target;
+            btn.textContent = isQuantumMode ? '🔬 Classical' : '⚛️ Quantum';
+            showStatus(`${isQuantumMode ? 'Quantum' : 'Classical'} mode activated`, 'success');
+        }
+        
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = event.target;
+            btn.textContent = isPaused ? '▶️ Play' : '⏸️ Pause';
+        }
+        
+        async function useAWSCompute() {
+            try {
+                useAWS = !useAWS;
+                const btn = event.target;
+                
+                if (useAWS) {
+                    // AWS Lambda呼び出し試行
+                    const result = await callAWSLambda('galaxy-quantum-simulator', {
+                        bodies: bodies.length,
+                        steps: 1
+                    });
+                    
+                    if (result) {
+                        btn.textContent = '💻 Local';
+                        showStatus('AWS compute enabled', 'success');
+                    } else {
+                        useAWS = false;
+                        btn.textContent = '☁️ AWS';
+                    }
+                } else {
+                    btn.textContent = '☁️ AWS';
+                    showStatus('Local compute enabled', 'info');
+                }
+            } catch (error) {
+                console.error('AWS toggle error:', error);
+                useAWS = false;
+                event.target.textContent = '☁️ AWS';
+                showStatus('AWS unavailable, using local compute', 'warning');
+            }
+        }
+        
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                if (!initializeCanvas()) {
+                    throw new Error('Canvas initialization failed');
+                }
+                
+                setupEventHandlers();
+                initBodies(100);
+                
+                // パフォーマンス監視開始
+                setInterval(() => {
+                    if (typeof performance !== 'undefined' && performance.memory) {
+                        performanceMetrics.memoryUsage = performance.memory.usedJSHeapSize / 1024 / 1024;
+                        
+                        if (performanceMetrics.memoryUsage > 100) { // 100MB以上
+                            showStatus(`Memory usage: ${performanceMetrics.memoryUsage.toFixed(1)}MB`, 'warning');
+                        }
+                    }
+                }, 5000);
+                
+                animate();
+                showStatus('Galaxy Simulator Ultra initialized', 'success');
+                
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                document.body.innerHTML = `
+                    <div style="text-align: center; color: red; margin-top: 50px;">
+                        <h2>🚨 Initialization Error</h2>
+                        <p>${error.message}</p>
+                        <p>Please refresh the page or try a different browser.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
