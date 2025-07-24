@@ -3,14 +3,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.html",
+      "src": "galaxy-advanced.html",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/",
-      "dest": "/index.html"
+      "dest": "/galaxy-advanced.html"
     }
   ]
 }

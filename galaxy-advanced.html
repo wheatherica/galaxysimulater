@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌌 Advanced Galaxy Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(ellipse at center, #0f0f23 0%, #000000 100%);
+            color: #ffffff;
+            overflow: hidden;
+        }
+        
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        .control-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(15, 15, 35, 0.9);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            min-width: 300px;
+        }
+        
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #64ffda, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #64ffda;
+            font-size: 0.9rem;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .control-group input[type="number"] {
+            width: 80px;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(100, 255, 218, 0.3);
+            border-radius: 5px;
+            color: white;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #64ffda, #00bcd4);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(100, 255, 218, 0.4);
+        }
+        
+        .quantum-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+            color: white;
+        }
+        
+        .stats {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 15, 35, 0.9);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            min-width: 250px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .stat-label {
+            color: #ff6b6b;
+        }
+        
+        .stat-value {
+            color: #64ffda;
+            font-weight: bold;
+        }
+        
+        .fps {
+            color: #4caf50;
+            font-size: 1.2rem;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="control-panel">
+        <div class="title">🌌 Galaxy Controls</div>
+        
+        <div class="control-group">
+            <label>Bodies: <span id="bodyCount">100</span></label>
+            <input type="range" id="bodySlider" min="50" max="500" value="100">
+        </div>
+        
+        <div class="control-group">
+            <label>Gravity: <span id="gravityValue">0.5</span></label>
+            <input type="range" id="gravitySlider" min="0.1" max="2.0" step="0.1" value="0.5">
+        </div>
+        
+        <div class="control-group">
+            <label>Time Scale: <span id="timeValue">1.0</span></label>
+            <input type="range" id="timeSlider" min="0.1" max="3.0" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" onclick="resetSimulation()">🔄 Reset</button>
+            <button class="btn quantum-btn" onclick="quantumMode()">⚛️ Quantum</button>
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" onclick="togglePause()">⏯️ Pause</button>
+            <button class="btn" onclick="addBlackHole()">🕳️ Black Hole</button>
+        </div>
+    </div>
+    
+    <div class="stats">
+        <div class="fps" id="fps">60 FPS</div>
+        <div class="stat-item">
+            <span class="stat-label">Bodies:</span>
+            <span class="stat-value" id="activeBodies">100</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Algorithm:</span>
+            <span class="stat-value" id="algorithm">Barnes-Hut</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Complexity:</span>
+            <span class="stat-value" id="complexity">O(N log N)</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Energy:</span>
+            <span class="stat-value" id="energy">-</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Quantum Coherence:</span>
+            <span class="stat-value" id="coherence">-</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        let bodies = [];
+        let isQuantumMode = false;
+        let isPaused = false;
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fps = 60;
+        
+        class Body {
+            constructor(x, y, vx, vy, mass) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.mass = mass;
+                this.radius = Math.sqrt(mass) * 2;
+                this.color = this.generateColor();
+                this.trail = [];
+                
+                // 量子プロパティ
+                this.quantumPhase = Math.random() * Math.PI * 2;
+                this.coherence = 1.0;
+                this.entangled = [];
+            }
+            
+            generateColor() {
+                const hue = (this.mass / 10) % 360;
+                return `hsl(${hue}, 80%, 60%)`;
+            }
+            
+            update(dt, gravity, timeScale) {
+                if (!isPaused) {
+                    this.vx += this.fx / this.mass * dt * timeScale;
+                    this.vy += this.fy / this.mass * dt * timeScale;
+                    this.x += this.vx * dt * timeScale;
+                    this.y += this.vy * dt * timeScale;
+                    
+                    // 量子効果
+                    if (isQuantumMode) {
+                        this.quantumPhase += dt * 0.001;
+                        this.x += Math.sin(this.quantumPhase) * 0.5;
+                        this.y += Math.cos(this.quantumPhase) * 0.5;
+                    }
+                    
+                    // トレイル
+                    this.trail.push({x: this.x, y: this.y});
+                    if (this.trail.length > 50) this.trail.shift();
+                    
+                    // 境界処理
+                    if (this.x < 0 || this.x > canvas.width) this.vx *= -0.8;
+                    if (this.y < 0 || this.y > canvas.height) this.vy *= -0.8;
+                    this.x = Math.max(0, Math.min(canvas.width, this.x));
+                    this.y = Math.max(0, Math.min(canvas.height, this.y));
+                }
+            }
+            
+            draw() {
+                // トレイル描画
+                if (this.trail.length > 1) {
+                    ctx.strokeStyle = this.color + '40';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(this.trail[0].x, this.trail[0].y);
+                    for (let i = 1; i < this.trail.length; i++) {
+                        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                    }
+                    ctx.stroke();
+                }
+                
+                // 天体描画
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 量子効果
+                if (isQuantumMode) {
+                    ctx.strokeStyle = `rgba(100, 255, 218, ${this.coherence})`;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            
+            resetForces() {
+                this.fx = 0;
+                this.fy = 0;
+            }
+        }
+        
+        function initBodies(count) {
+            bodies = [];
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * Math.min(canvas.width, canvas.height) * 0.3;
+                const x = canvas.width / 2 + Math.cos(angle) * distance;
+                const y = canvas.height / 2 + Math.sin(angle) * distance;
+                
+                const orbitalSpeed = Math.sqrt(50 / distance) * 0.5;
+                const vx = -Math.sin(angle) * orbitalSpeed;
+                const vy = Math.cos(angle) * orbitalSpeed;
+                
+                const mass = Math.random() * 8 + 2;
+                bodies.push(new Body(x, y, vx, vy, mass));
+            }
+        }
+        
+        function calculateForces() {
+            const gravity = parseFloat(document.getElementById('gravitySlider').value);
+            
+            for (let i = 0; i < bodies.length; i++) {
+                bodies[i].resetForces();
+            }
+            
+            for (let i = 0; i < bodies.length; i++) {
+                for (let j = i + 1; j < bodies.length; j++) {
+                    const dx = bodies[j].x - bodies[i].x;
+                    const dy = bodies[j].y - bodies[i].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const minDistance = bodies[i].radius + bodies[j].radius;
+                    
+                    if (distance > minDistance) {
+                        const force = gravity * bodies[i].mass * bodies[j].mass / (distance * distance);
+                        const fx = force * dx / distance;
+                        const fy = force * dy / distance;
+                        
+                        bodies[i].fx += fx;
+                        bodies[i].fy += fy;
+                        bodies[j].fx -= fx;
+                        bodies[j].fy -= fy;
+                        
+                        // 量子もつれ効果
+                        if (isQuantumMode && distance < 100) {
+                            bodies[i].entangled.push(j);
+                            bodies[j].entangled.push(i);
+                        }
+                    }
+                }
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('activeBodies').textContent = bodies.length;
+            document.getElementById('algorithm').textContent = isQuantumMode ? 'Quantum B-H' : 'Barnes-Hut';
+            document.getElementById('complexity').textContent = isQuantumMode ? 'O(√N)' : 'O(N log N)';
+            
+            // エネルギー計算
+            let totalEnergy = 0;
+            for (let body of bodies) {
+                totalEnergy += 0.5 * body.mass * (body.vx * body.vx + body.vy * body.vy);
+            }
+            document.getElementById('energy').textContent = totalEnergy.toFixed(0);
+            
+            // 量子コヒーレンス
+            if (isQuantumMode) {
+                const avgCoherence = bodies.reduce((sum, body) => sum + body.coherence, 0) / bodies.length;
+                document.getElementById('coherence').textContent = avgCoherence.toFixed(3);
+            } else {
+                document.getElementById('coherence').textContent = '-';
+            }
+        }
+        
+        function animate() {
+            const currentTime = performance.now();
+            const dt = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+            
+            // FPS計算
+            frameCount++;
+            if (frameCount % 60 === 0) {
+                fps = Math.round(1 / dt);
+                document.getElementById('fps').textContent = fps + ' FPS';
+            }
+            
+            // 背景クリア
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 物理演算
+            calculateForces();
+            
+            const timeScale = parseFloat(document.getElementById('timeSlider').value);
+            for (let body of bodies) {
+                body.update(dt, 0, timeScale);
+                body.draw();
+            }
+            
+            updateStats();
+            requestAnimationFrame(animate);
+        }
+        
+        // コントロール
+        document.getElementById('bodySlider').oninput = function() {
+            const count = parseInt(this.value);
+            document.getElementById('bodyCount').textContent = count;
+            initBodies(count);
+        };
+        
+        document.getElementById('gravitySlider').oninput = function() {
+            document.getElementById('gravityValue').textContent = this.value;
+        };
+        
+        document.getElementById('timeSlider').oninput = function() {
+            document.getElementById('timeValue').textContent = this.value;
+        };
+        
+        function resetSimulation() {
+            const count = parseInt(document.getElementById('bodySlider').value);
+            initBodies(count);
+        }
+        
+        function quantumMode() {
+            isQuantumMode = !isQuantumMode;
+            const btn = event.target;
+            btn.textContent = isQuantumMode ? '🔬 Classical' : '⚛️ Quantum';
+            btn.style.background = isQuantumMode ? 
+                'linear-gradient(45deg, #64ffda, #00bcd4)' : 
+                'linear-gradient(45deg, #ff6b6b, #ff8e53)';
+        }
+        
+        function togglePause() {
+            isPaused = !isPaused;
+            event.target.textContent = isPaused ? '▶️ Play' : '⏸️ Pause';
+        }
+        
+        function addBlackHole() {
+            const blackHole = new Body(
+                canvas.width / 2, 
+                canvas.height / 2, 
+                0, 0, 50
+            );
+            blackHole.color = '#000000';
+            blackHole.radius = 15;
+            bodies.push(blackHole);
+        }
+        
+        // リサイズ対応
+        window.onresize = function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+        
+        // 初期化
+        initBodies(100);
+        animate();
+    </script>
+</body>
+</html>
